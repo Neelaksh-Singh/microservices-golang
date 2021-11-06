@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"handlers"
 	"log"
+	"micro1/handlers"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,12 +13,14 @@ import (
 func main() {
 	l := log.New(os.Stdout, "ns", log.LstdFlags)
 
-	hh := handlers.NewHello(l)
-	gh := handlers.NewGoodbye(l)
+	// hh := handlers.NewHello(l)
+	// gh := handlers.NewGoodbye(l)
+	ph := handlers.NewProducts(l)
 	//serve mux registers handler and returns info stored in the
 	sm := http.NewServeMux()
-	sm.Handle("/", hh)
-	sm.Handle("/goodbye", gh)
+	// sm.Handle("/", hh)
+	// sm.Handle("/goodbye", gh)
+	sm.Handle("/", ph)
 
 	s := &http.Server{
 		Addr:         ":9090",
@@ -31,9 +33,11 @@ func main() {
 	// since listen and sever are blocking, we put it in a go func
 
 	go func() {
+		l.Println("Starting server on port 9090")
+
 		err := s.ListenAndServe()
 		if err != nil {
-			l.Printf("error : %s \n", err)
+			l.Printf("Error starting server: %s\n", err)
 			os.Exit(1)
 		}
 	}()
@@ -45,7 +49,7 @@ func main() {
 	signal.Notify(sigChan, os.Kill)
 
 	sig := <-sigChan
-	l.Panicln("recieved terminate, gracefull shutdown", sig)
+	l.Println("recieved terminate, gracefull shutdown", sig)
 
 	// graceful shutdown ==> wait till all the requests in the queue has finished and
 	// will stop taking further requests

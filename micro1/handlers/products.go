@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -115,8 +116,22 @@ func (p *Products) MiddlewareProductValidation(next http.Handler) http.Handler {
 			return
 		}
 
+		//validate the product
+
+		err = prod.Validator()
+		if err != nil {
+			p.l.Println("[ERROR] validating product", err)
+			http.Error(rw, fmt.Sprintf("Error validating product: %s", err), http.StatusBadRequest)
+			return
+		}
+
+		// add product to context
 		ctx := context.WithValue(r.Context(), KeyProduct{}, prod)
 		req := r.WithContext(ctx)
+
+		//calls next handler, which may be another middleware in the chain
+		//or the final handler
+
 		next.ServeHTTP(rw, req)
 	})
 

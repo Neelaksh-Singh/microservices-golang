@@ -3,48 +3,69 @@ package main
 import (
 	"context"
 	"log"
-	"micro1/handlers"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
+	"github.com/go-openapi/runtime/middleware"
+
+	"micro1/data"
+	"micro1/handlers"
+
 	"github.com/gorilla/mux"
+	"github.com/nicholasjackson/env"
 )
 
+var bindAddress = env.String("BIND_ADDRESS", false, ":9090", "Bind address for the server")
+
 func main() {
-	l := log.New(os.Stdout, "ns", log.LstdFlags)
 
-	// hh := handlers.NewHello(l)
-	// gh := handlers.NewGoodbye(l)
-	ph := handlers.NewProducts(l)
-	//serve mux registers handler and returns info stored in the
-	// sm := http.NewServeMux()
-	// sm.Handle("/", hh)
-	// sm.Handle("/goodbye", gh)
+	env.Parse()
+
+	l := log.New(os.Stdout, "products-api ", log.LstdFlags)
+	v := data.NewValidation()
+
+	// create the handlers
+	ph := handlers.NewProducts(l, v)
+
+	// create a new serve mux and register the handlers
 	sm := mux.NewRouter()
-	getRouter := sm.Methods(http.MethodGet).Subrouter()
-	getRouter.HandleFunc("/", ph.GetProducts)
 
-	putRouter := sm.Methods(http.MethodPut).Subrouter()
-	putRouter.HandleFunc("/{id:[0-9]+}", ph.UpdateProducts)
-	putRouter.Use(ph.MiddlewareProductValidation)
+	// handlers for API
+	getR := sm.Methods(http.MethodGet).Subrouter()
+	getR.HandleFunc("/products", ph.ListAll)
+	getR.HandleFunc("/products/{id:[0-9]+}", ph.ListSingle)
 
-	postRouter := sm.Methods(http.MethodPost).Subrouter()
-	postRouter.HandleFunc("/", ph.AddProduct)
-	postRouter.Use(ph.MiddlewareProductValidation)
-	// sm.Handle("/", ph)
+	putR := sm.Methods(http.MethodPut).Subrouter()
+	putR.HandleFunc("/products", ph.Update)
+	putR.Use(ph.MiddlewareValidateProduct)
 
-	s := &http.Server{
-		Addr:         ":9090",
-		Handler:      sm,
-		IdleTimeout:  120 * time.Second,
-		ReadTimeout:  1 * time.Second,
-		WriteTimeout: 1 * time.Second,
+	postR := sm.Methods(http.MethodPost).Subrouter()
+	postR.HandleFunc("/products", ph.Create)
+	postR.Use(ph.MiddlewareValidateProduct)
+
+	deleteR := sm.Methods(http.MethodDelete).Subrouter()
+	deleteR.HandleFunc("/products/{id:[0-9]+}", ph.Delete)
+
+	// handler for documentation
+	opts := middleware.RedocOpts{SpecURL: "/swagger.yaml"}
+	sh := middleware.Redoc(opts, nil)
+
+	getR.Handle("/docs", sh)
+	getR.Handle("/swagger.yaml", http.FileServer(http.Dir("./")))
+
+	// create a new server
+	s := http.Server{
+		Addr:         *bindAddress,      // configure the bind address
+		Handler:      sm,                // set the default handler
+		ErrorLog:     l,                 // set the logger for the server
+		ReadTimeout:  5 * time.Second,   // max time to read request from the client
+		WriteTimeout: 10 * time.Second,  // max time to write response to the client
+		IdleTimeout:  120 * time.Second, // max time for connections using TCP Keep-Alive
 	}
 
-	// since listen and sever are blocking, we put it in a go func
-
+	// start the server
 	go func() {
 		l.Println("Starting server on port 9090")
 
@@ -55,20 +76,16 @@ func main() {
 		}
 	}()
 
-	sigChan := make(chan os.Signal, 1)
-	// following will broadcast message on channel when os recieves killed or interrupted
-	// command
-	signal.Notify(sigChan, os.Interrupt)
-	signal.Notify(sigChan, os.Kill)
+	// trap sigterm or interupt and gracefully shutdown the server
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, os.Kill)
 
-	sig := <-sigChan
-	l.Println("recieved terminate, gracefull shutdown", sig)
+	// Block until a signal is received.
+	sig := <-c
+	log.Println("Got signal:", sig)
 
-	// graceful shutdown ==> wait till all the requests in the queue has finished and
-	// will stop taking further requests
-
-	tc, _ := context.WithTimeout(context.Background(), 30*time.Second)
-
-	s.Shutdown(tc)
-
+	// gracefully shutdown the server, waiting max 30 seconds for current operations to complete
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	s.Shutdown(ctx)
 }

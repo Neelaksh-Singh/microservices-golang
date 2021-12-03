@@ -1,138 +1,72 @@
+// Package classification of Product API
+
+// Documentation for Product API
+
+// Shemes: http
+// BasePath: /
+// Version: 1.0.0
+
+// Consumes:
+// - application/json
+
+// Produces:
+// - application/json
+
+// swagger:meta
+
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"log"
+	"micro1/data"
 	"net/http"
 	"strconv"
-
-	"micro1/data"
 
 	"github.com/gorilla/mux"
 )
 
+// Products handler for getting and updating products
 type Products struct {
 	l *log.Logger
+	v *data.Validation
 }
 
-func NewProducts(l *log.Logger) *Products {
-	return &Products{l}
+// NewProducts returns a new products handler with the given logger
+func NewProducts(l *log.Logger, v *data.Validation) *Products {
+	return &Products{l, v}
 }
 
-// func (p *Products) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-// 	if r.Method == http.MethodGet {
-// 		p.getProducts(rw, r)
-// 		return
-// 	}
+// ErrInvalidProductPath is an error message when the product path is not valid
+var ErrInvalidProductPath = fmt.Errorf("Invalid Path, path should be /products/[id]")
 
-// 	if r.Method == http.MethodPost {
-// 		p.addProduct(rw, r)
-// 		return
-// 	}
-
-// 	if r.Method == http.MethodPut {
-// 		p.l.Println("PUT", r.URL.Path)
-// 		reg := regexp.MustCompile(`/([0-9]+)`)
-// 		g := reg.FindAllStringSubmatch(r.URL.Path, -1)
-// 		if len(g) != 1 {
-// 			p.l.Println("Invalid URI more than one id")
-// 			http.Error(rw, "Invalid URI", http.StatusBadRequest)
-// 			return
-// 		}
-
-// 		if len(g[0]) != 2 {
-// 			p.l.Println("Invalid URI more than one capture group")
-// 			http.Error(rw, "Invalid URI", http.StatusBadRequest)
-// 			return
-// 		}
-// 		idString := g[0][1]
-// 		id, err := strconv.Atoi(idString)
-
-// 		if err != nil {
-// 			p.l.Println("Invalid URI unable to convert to No")
-// 			http.Error(rw, "Invalid URI", http.StatusBadRequest)
-// 			return
-// 		}
-// 		p.updateProducts(id, rw, r)
-// 		return
-// 	}
-
-// 	rw.WriteHeader(http.StatusMethodNotAllowed)
-// }
-
-func (p *Products) GetProducts(rw http.ResponseWriter, r *http.Request) {
-	lp := data.GetProducts()
-	//returning lp (a list ) to user
-	err := lp.ToJSON(rw)
-
-	if err != nil {
-		http.Error(rw, "Unable to marshal Json", http.StatusInternalServerError)
-	}
+// GenericError is a generic error message returned by a server
+type GenericError struct {
+	Message string `json:"message"`
 }
 
-func (p *Products) AddProduct(rw http.ResponseWriter, r *http.Request) {
-	p.l.Println("Handles POST Request")
-	prod := r.Context().Value(KeyProduct{}).(data.Product)
-
-	data.AddProduct(&prod)
-
+// ValidationError is a collection of validation error messages
+type ValidationError struct {
+	Messages []string `json:"messages"`
 }
 
-func (p *Products) UpdateProducts(rw http.ResponseWriter, r *http.Request) {
+// getProductID returns the product ID from the URL
+// Panics if cannot convert the id into an integer
+// this should never happen as the router ensures that
+// this is a valid number
+func getProductID(r *http.Request) int {
+	// parse the product id from the url
 	vars := mux.Vars(r)
+
+	// convert the id into an integer and return
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		http.Error(rw, "Unable to convert id", http.StatusBadRequest)
+		// should never happen
+		panic(err)
 	}
 
-	p.l.Println("Handles PUT Request", id)
-	prod := r.Context().Value(KeyProduct{}).(data.Product)
-
-	err = data.UpdateProduct(id, &prod)
-	if err == data.ErrorProductNotFound {
-		http.Error(rw, "Product Not Found", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		http.Error(rw, "product not found", http.StatusInternalServerError)
-		return
-	}
-
+	return id
 }
 
+// KeyProduct is a key used for the Product object in the context
 type KeyProduct struct{}
-
-// when the request passes this middleware, then respected http methods get executed
-
-func (p *Products) MiddlewareProductValidation(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		prod := data.Product{}
-		err := prod.FromJSON(r.Body)
-
-		if err != nil {
-			p.l.Println("[ERROR] deserealizing product", err)
-			http.Error(rw, "Error reading product", http.StatusBadRequest)
-			return
-		}
-
-		//validate the product
-
-		err = prod.Validator()
-		if err != nil {
-			p.l.Println("[ERROR] validating product", err)
-			http.Error(rw, fmt.Sprintf("Error validating product: %s", err), http.StatusBadRequest)
-			return
-		}
-
-		// add product to context
-		ctx := context.WithValue(r.Context(), KeyProduct{}, prod)
-		req := r.WithContext(ctx)
-
-		//calls next handler, which may be another middleware in the chain
-		//or the final handler
-
-		next.ServeHTTP(rw, req)
-	})
-
-}

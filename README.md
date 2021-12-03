@@ -2,3 +2,17 @@
 
 ### Standard microsevices in golang
 Go into any folder and run `go run main.go`
+
+### CRUD Operations
+
+##### Create(POST)
+
+`curl -v localhost:9090/ -d '{"name": "", "description": "" , "price" : _ }' | jq`
+
+##### Update(PUT)
+
+`curl -v localhost:9090/{id_of_item} -XPUT -d '{"name": "tea", "description":" a nice cup of tea"}' | jq`
+
+##### Read(GET)
+
+`curl -v localhost:9090 | jq`

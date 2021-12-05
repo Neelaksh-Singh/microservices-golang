@@ -7,7 +7,7 @@ Go into any folder and run `go run main.go`
 
 ##### Create(POST)
 
-`curl -v localhost:9090/ -d '{"name": "", "description": "" , "price" : _ }' | jq`
+`curl -v localhost:9090/ -d '{"name": "", "description": "" , "price" : _ , "sku": _ }' | jq`
 
 ##### Update(PUT)
 
@@ -16,3 +16,7 @@ Go into any folder and run `go run main.go`
 ##### Read(GET)
 
 `curl -v localhost:9090 | jq`
+
+#### Viewing Swagger API's := `http://localhost:9090/products/docs`
+
+
